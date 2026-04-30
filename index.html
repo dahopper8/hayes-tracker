@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hayes Tracker</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #fefefc;
+    --surface2: #f0efe9;
+    --border: #e2e0d8;
+    --border-strong: #c8c5b8;
+    --text: #18170f;
+    --muted: #6b6960;
+    --faint: #a8a69e;
+    --green: #1a5c3a;
+    --green-bg: #e8f5ee;
+    --red: #a82010;
+    --red-bg: #fcecea;
+    --amber: #7a4f00;
+    --amber-bg: #fdf2d8;
+    --blue: #1a3f7a;
+    --blue-bg: #e8eef8;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--text);
+    color: var(--surface);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; align-items: baseline; gap: 10px; }
+  .header h1 { font-family: 'DM Serif Display', serif; font-size: 20px; font-weight: 400; letter-spacing: -.2px; }
+  .header h1 em { font-style: italic; opacity: .7; }
+  .header-week { font-size: 11px; opacity: .5; letter-spacing: .04em; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .auth-status { font-size: 12px; opacity: .6; }
+  .btn-auth { font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; cursor: pointer; transition: background .15s; }
+  .btn-auth:hover { background: rgba(255,255,255,.2); }
+
+  /* NAV */
+  .nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; gap: 0; }
+  .nav-tab { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .15s; letter-spacing: .01em; }
+  .nav-tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .nav-tab:hover { color: var(--text); }
+
+  /* MAIN */
+  .main { max-width: 1280px; margin: 0 auto; padding: 24px 32px; }
+
+  /* SUMMARY */
+  .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow); }
+  .metric-label { font-size: 10px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .metric-val { font-family: 'DM Serif Display', serif; font-size: 28px; font-weight: 400; line-height: 1; }
+
+  /* TOOLBAR */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar input[type=text], .toolbar select {
+    font-family: 'DM Sans', sans-serif; font-size: 13px;
+    padding: 7px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); outline: none;
+  }
+  .toolbar input[type=text]:focus, .toolbar select:focus { border-color: var(--border-strong); }
+  .toolbar input[type=text] { width: 200px; }
+  .spacer { flex: 1; }
+  button {
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); padding: 7px 14px; transition: all .12s; white-space: nowrap;
+  }
+  button:hover { background: var(--surface2); border-color: var(--border-strong); }
+  button.primary { background: var(--text); color: var(--surface); border-color: var(--text); }
+  button.primary:hover { background: #2a2920; }
+  button.sm { padding: 3px 9px; font-size: 12px; }
+  button.danger { color: var(--red); border-color: #e0b8b4; }
+  button.danger:hover { background: var(--red-bg); }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* TABLE */
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th {
+    font-size: 10px; font-weight: 600; color: var(--faint);
+    text-transform: uppercase; letter-spacing: .08em;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    text-align: left; background: var(--surface2); white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid #f0efe8; transition: background .08s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #fafaf6; }
+  tbody td { padding: 10px 14px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; letter-spacing: .03em; }
+  .badge-own { background: var(--green-bg); color: var(--green); }
+  .badge-watch { background: var(--blue-bg); color: var(--blue); }
+
+  .chip { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin: 1px 2px 1px 0; }
+  .chip-mentioned { background: var(--amber-bg); color: var(--amber); }
+  .chip-bought { background: var(--green-bg); color: var(--green); }
+  .chip-sold { background: var(--red-bg); color: var(--red); }
+
+  .up { color: var(--green); font-weight: 600; }
+  .dn { color: var(--red); font-weight: 600; }
+  .na { color: var(--faint); }
+  .actions { display: flex; gap: 4px; }
+
+  /* MATRIX */
+  .matrix-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .matrix-controls label { font-size: 13px; color: var(--muted); }
+  .matrix-controls select { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+  .matrix-wrap { overflow-x: auto; }
+  .matrix-table { border-collapse: collapse; width: 100%; }
+  .matrix-table th, .matrix-table td { border: 1px solid var(--border); }
+  .matrix-table thead th {
+    font-size: 9px; font-weight: 600; color: var(--faint); text-transform: uppercase;
+    letter-spacing: .06em; padding: 8px 6px; background: var(--surface2);
+    text-align: center; white-space: nowrap;
+  }
+  .matrix-table thead th.ticker-col { text-align: left; padding-left: 14px; }
+  .matrix-table td { padding: 7px 6px; font-size: 12px; text-align: center; }
+  .ticker-col { position: sticky; left: 0; background: var(--surface); z-index: 2; text-align: left !important; padding-left: 14px !important; font-weight: 600; min-width: 100px; border-right: 1px solid var(--border-strong) !important; }
+  .matrix-table tbody tr:hover td { background: #fafaf6; }
+  .matrix-table tbody tr:hover td.ticker-col { background: #fafaf6; }
+  .mcell-mentioned { background: var(--amber-bg); color: var(--amber); font-weight: 700; }
+  .mcell-bought { background: var(--green-bg); color: var(--green); font-weight: 700; }
+  .mcell-sold { background: var(--red-bg); color: var(--red); font-weight: 700; }
+  .mcell-empty { color: #dddbd2; }
+  .total-col { font-weight: 700; border-left: 1px solid var(--border-strong) !important; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); align-items: center; }
+
+  /* MODALS */
+  .overlay { position: fixed; inset: 0; background: rgba(20,18,10,.4); display: flex; align-items: center; justify-content: center; z-index: 300; backdrop-filter: blur(2px); }
+  .modal { background: var(--surface); border-radius: 16px; border: 1px solid var(--border-strong); padding: 26px; width: 420px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 40px rgba(0,0,0,.15); }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; font-weight: 400; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+  .form-row { margin-bottom: 14px; }
+  .form-row label { display: block; font-size: 10px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 5px; }
+  .form-row input, .form-row select {
+    width: 100%; padding: 9px 11px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 14px; font-family: 'DM Sans', sans-serif;
+    color: var(--text); background: var(--surface); outline: none;
+    transition: border-color .12s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--border-strong); }
+  .form-hint { font-size: 11px; color: var(--faint); margin-top: 5px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+
+  /* SETTINGS */
+  .settings-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .settings-section h3 { font-family: 'DM Serif Display', serif; font-size: 17px; font-weight: 400; margin-bottom: 14px; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .conn-status { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .dot-ok { background: var(--green); }
+  pre.sql { font-size: 12px; font-family: 'Courier New', monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; overflow-x: auto; line-height: 1.7; color: var(--text); }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: var(--surface); padding: 10px 18px; border-radius: var(--radius); font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 999; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+  .toast.show { opacity: 1; }
+
+  .empty { text-align: center; padding: 48px; color: var(--faint); font-size: 13px; }
+  .loading-row td { text-align: center; padding: 32px; color: var(--faint); font-size: 13px; }
+
+  .streak-badge { display: inline-block; font-size: 10px; font-weight: 600; color: var(--amber); background: var(--amber-bg); padding: 2px 7px; border-radius: 20px; }
+
+  @media (max-width: 640px) {
+    .main { padding: 16px; }
+    .header { padding: 0 16px; }
+    .nav { padding: 0 16px; }
+    .summary { grid-template-columns: repeat(2,1fr); }
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Hayes <em>Tracker</em></h1>
+    <span class="header-week" id="header-week"></span>
+  </div>
+  <div class="header-right">
+    <span class="auth-status" id="auth-status">Not signed in</span>
+    <button class="btn-auth" id="btn-signin" onclick="signIn()">Sign in with Google</button>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="nav-tab active" onclick="showTab('stocks')">Stocks</div>
+  <div class="nav-tab" onclick="showTab('matrix')">Week-over-week</div>
+  <div class="nav-tab" onclick="showTab('settings')">Settings</div>
+</div>
+
+<div class="main">
+
+  <!-- STOCKS -->
+  <div id="tab-stocks">
+    <div class="summary" id="summary-bar">
+      <div class="metric"><div class="metric-label">Total</div><div class="metric-val">—</div></div>
+      <div class="metric"><div class="metric-label">Owned</div><div class="metric-val">—</div></div>
+      <div class="metric"><div class="metric-label">Watchlist</div><div class="metric-val">—</div></div>
+      <div class="metric"><div class="metric-label">Avg upside</div><div class="metric-val">—</div></div>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search ticker or name..." oninput="renderStocks()">
+      <select id="filter-status" onchange="renderStocks()">
+        <option value="">All holdings</option>
+        <option value="own">Owned</option>
+        <option value="watch">Watchlist</option>
+      </select>
+      <select id="filter-upside" onchange="renderStocks()">
+        <option value="">All upside</option>
+        <option value="pos">Positive upside</option>
+        <option value="neg">At / past target</option>
+      </select>
+      <div class="spacer"></div>
+      <button id="btn-refresh" onclick="refreshPrices()">↻ Refresh prices</button>
+      <button onclick="exportCSV()">Export CSV</button>
+      <button class="primary" onclick="openAddStock()">+ Add stock</button>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:80px">Ticker</th>
+            <th style="width:160px">Name</th>
+            <th style="width:78px">Status</th>
+            <th style="width:105px">Price</th>
+            <th style="width:95px">Target</th>
+            <th style="width:88px">Upside</th>
+            <th style="width:180px">This week</th>
+            <th style="width:100px">Streak</th>
+            <th>Actions</th>
+          </tr></thead>
+          <tbody id="stock-tbody">
+            <tr><td colspan="9" class="loading-row" style="padding:32px;text-align:center;color:#aaa;">Sign in with Google to load your data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MATRIX -->
+  <div id="tab-matrix" style="display:none">
+    <div class="matrix-controls">
+      <label>Show last</label>
+      <select id="matrix-weeks" onchange="renderMatrix()">
+        <option value="8">8 weeks</option>
+        <option value="12" selected>12 weeks</option>
+        <option value="20">20 weeks</option>
+        <option value="999">All time</option>
+      </select>
+      <label>Filter</label>
+      <select id="matrix-filter" onchange="renderMatrix()">
+        <option value="">All stocks</option>
+        <option value="own">Owned only</option>
+        <option value="active">Active last 4 weeks</option>
+      </select>
+    </div>
+    <div class="table-card">
+      <div class="matrix-wrap">
+        <div id="matrix-content" class="empty">Sign in and add some activity to see the matrix.</div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="chip chip-mentioned">M</span> Mentioned</span>
+      <span><span class="chip chip-bought">B</span> Bought</span>
+      <span><span class="chip chip-sold">S</span> Sold</span>
+      <span style="color:#ccc;margin:0 4px">|</span>
+      <span>· = no mention &nbsp; Total = all-time count</span>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="tab-settings" style="display:none">
+    <div class="settings-section">
+      <h3>Google Drive sync</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Your data is stored as <code style="font-size:12px;background:var(--surface2);padding:1px 5px;border-radius:4px">hayes_tracker_data.json</code> in your Google Drive. Sign in once per device and you're synced everywhere.</p>
+      <div class="conn-status">
+        <span class="dot" id="dot-drive"></span>
+        <span id="status-drive">Not connected</span>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>FMP pricing</h3>
+      <div class="form-row" style="max-width:360px">
+        <label>Financial Modeling Prep API key</label>
+        <input type="text" id="cfg-fmp-key" placeholder="Your FMP key">
+        <div class="form-hint">Free tier at financialmodelingprep.com — 250 calls/day. Used for auto price + name lookup.</div>
+      </div>
+      <div class="conn-status" style="margin-bottom:14px">
+        <span class="dot" id="dot-fmp"></span>
+        <span id="status-fmp">Not configured</span>
+      </div>
+      <button class="primary" onclick="saveFmpKey()">Save FMP key</button>
+    </div>
+    <div class="settings-section">
+      <h3>Current week</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Default week for new log entries. Override per-entry when catching up on old episodes.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="cfg-current-week" style="font-family:'DM Sans',sans-serif;font-size:14px;padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)">
+        <button onclick="saveCurrentWeek()">Set week</button>
+        <button onclick="setWeekToday()">Use today</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- STOCK MODAL -->
+<div id="stock-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeOverlay('stock-overlay')">
+  <div class="modal">
+    <div class="modal-title" id="stock-modal-title">Add stock</div>
+    <div class="modal-sub" id="stock-modal-sub">Name and price auto-fill from FMP when you save.</div>
+    <div class="form-row">
+      <label>Ticker</label>
+      <input type="text" id="f-ticker" placeholder="e.g. AAPL" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="form-row">
+      <label>Company name <span style="font-weight:400;text-transform:none;font-size:10px">(auto-filled)</span></label>
+      <input type="text" id="f-name" placeholder="Loads from FMP on save">
+    </div>
+    <div class="form-row">
+      <label>Current price ($) <span style="font-weight:400;text-transform:none;font-size:10px">(auto-filled)</span></label>
+      <input type="number" id="f-price" placeholder="Loads from FMP on save" step="0.01">
+    </div>
+    <div class="form-row">
+      <label>Tom Hayes price target ($)</label>
+      <input type="number" id="f-target" placeholder="0.00" step="0.01">
+    </div>
+    <div class="form-row">
+      <label>Status</label>
+      <select id="f-status"><option value="watch">Watchlist</option><option value="own">I own this</option></select>
+    </div>
+    <div class="form-row">
+      <label>Notes</label>
+      <input type="text" id="f-notes" placeholder="e.g. 3× over 3 years">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeOverlay('stock-overlay')">Cancel</button>
+      <button class="primary" id="btn-save-stock" onclick="saveStock()">Save stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOG MODAL -->
+<div id="log-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeOverlay('log-overlay')">
+  <div class="modal">
+    <div class="modal-title" id="log-modal-title">Log activity</div>
+    <div class="modal-sub" id="log-modal-sub"></div>
+    <div class="form-row">
+      <label>Activity type</label>
+      <select id="l-type">
+        <option value="mentioned">Positive mention</option>
+        <option value="bought">Bought</option>
+        <option value="sold">Sold</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Week of <span style="font-weight:400;text-transform:none;font-size:10px">— edit freely for catch-up episodes</span></label>
+      <input type="date" id="l-week">
+      <div class="form-hint">Change this when reviewing older episodes. Defaults to your current week.</div>
+    </div>
+    <div class="form-row">
+      <label>Updated target ($) <span style="font-weight:400;text-transform:none;font-size:10px">(optional — updates stock target)</span></label>
+      <input type="number" id="l-target" placeholder="Leave blank to keep current" step="0.01">
+    </div>
+    <div class="form-row">
+      <label>Notes</label>
+      <input type="text" id="l-notes" placeholder="e.g. top pick heading into earnings">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeOverlay('log-overlay')">Cancel</button>
+      <button class="primary" onclick="saveLog()">Log it</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRICE MODAL -->
+<div id="price-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeOverlay('price-overlay')">
+  <div class="modal">
+    <div class="modal-title" id="price-modal-title">Update price</div>
+    <div class="form-row" style="margin-top:18px">
+      <label>Current price ($)</label>
+      <input type="number" id="p-price" step="0.01">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeOverlay('price-overlay')">Cancel</button>
+      <button class="primary" onclick="savePrice()">Update</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ─── CONFIG ─── */
+const CLIENT_ID = '336827497576-vpoeagqan0ctf0g8mplsrgpu197735q1.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME = 'hayes_tracker_data.json';
+
+/* ─── STATE ─── */
+let stocks = [], logs = [];
+let driveFileId = null;
+let accessToken = null;
+let tokenClient = null;
+let cfg = { fmpKey: '', currentWeek: todayISO() };
+let editingId = null, loggingId = null, pricingId = null;
+let saveTimeout = null;
+
+/* ─── UTILS ─── */
+function todayISO() { return new Date().toISOString().slice(0,10); }
+function uid() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function upside(p,t) { if(!p||!t||p<=0) return null; return (t-p)/p*100; }
+function fmt(n,d=2) { return n==null?'—':Number(n).toFixed(d); }
+function fmtPct(n) { return n==null?'—':(n>=0?'+':'')+n.toFixed(1)+'%'; }
+function toast(msg, dur=2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), dur);
+}
+function closeOverlay(id) { document.getElementById(id).style.display='none'; }
+
+/* ─── LOCAL CONFIG (credentials only, not data) ─── */
+function loadLocalCfg() {
+  try { const r=localStorage.getItem('hayes_cfg_v3'); if(r) cfg={...cfg,...JSON.parse(r)}; } catch(e){}
+  document.getElementById('cfg-fmp-key').value = cfg.fmpKey||'';
+  document.getElementById('cfg-current-week').value = cfg.currentWeek||todayISO();
+  document.getElementById('header-week').textContent = 'week of '+cfg.currentWeek;
+  updateFmpDot();
+}
+function saveLocalCfg() {
+  try { localStorage.setItem('hayes_cfg_v3', JSON.stringify(cfg)); } catch(e){}
+}
+function saveFmpKey() {
+  cfg.fmpKey = document.getElementById('cfg-fmp-key').value.trim();
+  saveLocalCfg(); updateFmpDot(); toast('FMP key saved');
+}
+function saveCurrentWeek() {
+  const v = document.getElementById('cfg-current-week').value;
+  if(v) { cfg.currentWeek=v; saveLocalCfg(); document.getElementById('header-week').textContent='week of '+v; toast('Current week set to '+v); }
+}
+function setWeekToday() {
+  cfg.currentWeek = todayISO();
+  document.getElementById('cfg-current-week').value = cfg.currentWeek;
+  document.getElementById('header-week').textContent = 'week of '+cfg.currentWeek;
+  saveLocalCfg(); toast('Week reset to today');
+}
+function updateFmpDot() {
+  const ok = !!cfg.fmpKey;
+  document.getElementById('dot-fmp').className = 'dot'+(ok?' dot-ok':'');
+  document.getElementById('status-fmp').textContent = ok ? 'FMP: configured' : 'Not configured — enter key above';
+}
+
+/* ─── GOOGLE AUTH ─── */
+window.onload = function() {
+  loadLocalCfg();
+  // Wait for GSI to load
+  const check = setInterval(()=>{
+    if(window.google && google.accounts) {
+      clearInterval(check);
+      initGoogleAuth();
+    }
+  }, 100);
+};
+
+function initGoogleAuth() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if(resp.error) { toast('Auth error: '+resp.error, 5000); return; }
+      accessToken = resp.access_token;
+      document.getElementById('auth-status').textContent = 'Connected';
+      document.getElementById('btn-signin').textContent = 'Switch account';
+      document.getElementById('dot-drive').className = 'dot dot-ok';
+      document.getElementById('status-drive').textContent = 'Connected to Google Drive';
+      await loadDriveData();
+    }
+  });
+}
+
+function signIn() {
+  if(!tokenClient) { toast('Google auth not ready yet, try again in a second'); return; }
+  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+}
+
+/* ─── DRIVE I/O ─── */
+async function driveGet(url, opts={}) {
+  return fetch(url, { ...opts, headers: { 'Authorization': 'Bearer '+accessToken, ...(opts.headers||{}) }});
+}
+
+async function loadDriveData() {
+  toast('Loading from Google Drive…');
+  try {
+    // Search for existing file in appDataFolder
+    const search = await driveGet(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${FILE_NAME}'&fields=files(id,name)`
+    );
+    const result = await search.json();
+    if(result.files && result.files.length > 0) {
+      driveFileId = result.files[0].id;
+      const content = await driveGet(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+      const data = await content.json();
+      stocks = data.stocks || [];
+      logs = data.logs || [];
+      toast('Loaded '+stocks.length+' stocks from Drive');
+    } else {
+      // No file yet — start fresh
+      stocks = []; logs = [];
+      await saveToDrive();
+      toast('New tracker file created in Google Drive');
+    }
+    renderStocks(); renderMatrix();
+  } catch(e) {
+    toast('Drive error: '+e.message, 5000);
+    console.error(e);
+  }
+}
+
+async function saveToDrive() {
+  if(!accessToken) return;
+  const data = JSON.stringify({ stocks, logs, savedAt: new Date().toISOString() });
+  const metadata = { name: FILE_NAME, mimeType: 'application/json', parents: driveFileId ? undefined : ['appDataFolder'] };
+
+  try {
+    if(driveFileId) {
+      // Update existing
+      await driveGet(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: data
+      });
+    } else {
+      // Create new — multipart
+      const boundary = 'hayes_boundary_' + Date.now();
+      const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${boundary}--`;
+      const resp = await driveGet('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body
+      });
+      const r = await resp.json();
+      driveFileId = r.id;
+    }
+  } catch(e) {
+    toast('Save error: '+e.message, 5000);
+    console.error(e);
+  }
+}
+
+// Debounced save — batches rapid changes
+function scheduleSave() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveToDrive, 800);
+}
+
+/* ─── FMP ─── */
+async function fmpQuote(ticker) {
+  if(!cfg.fmpKey) return null;
+  try {
+    const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${ticker}?apikey=${cfg.fmpKey}`);
+    const d = await r.json();
+    if(d && d[0]) return { name: d[0].name, price: d[0].price };
+  } catch(e) {}
+  return null;
+}
+
+async function refreshPrices() {
+  if(!cfg.fmpKey) { toast('Add your FMP key in Settings first'); return; }
+  if(!accessToken) { toast('Sign in with Google first'); return; }
+  const btn = document.getElementById('btn-refresh');
+  btn.disabled=true; btn.textContent='Refreshing…';
+  let updated=0;
+  for(const s of stocks) {
+    const q = await fmpQuote(s.ticker);
+    if(q && q.price) {
+      s.price = q.price;
+      if(q.name && !s.name) s.name = q.name;
+      updated++;
+    }
+  }
+  await saveToDrive();
+  btn.disabled=false; btn.textContent='↻ Refresh prices';
+  renderStocks();
+  toast(`Updated ${updated} price${updated!==1?'s':''}`);
+}
+
+/* ─── TABS ─── */
+function showTab(t) {
+  ['stocks','matrix','settings'].forEach(id=>{
+    document.getElementById('tab-'+id).style.display = id===t?'':'none';
+  });
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    el.classList.toggle('active', ['stocks','matrix','settings'][i]===t);
+  });
+  if(t==='matrix') renderMatrix();
+}
+
+/* ─── STREAK ─── */
+function getStreak(ticker) {
+  const weeks = [...new Set(logs.map(l=>l.week_of))].sort().reverse();
+  let streak=0;
+  for(const w of weeks) {
+    if(logs.find(l=>l.ticker===ticker&&l.week_of===w)) streak++;
+    else break;
+  }
+  return streak;
+}
+
+/* ─── RENDER STOCKS ─── */
+function renderStocks() {
+  renderSummary();
+  const search = (document.getElementById('search').value||'').toLowerCase();
+  const fStatus = document.getElementById('filter-status').value;
+  const fUp = document.getElementById('filter-upside').value;
+  const weekLogs = logs.filter(l=>l.week_of===cfg.currentWeek);
+
+  let rows = stocks.filter(s=>{
+    if(search && !s.ticker.toLowerCase().includes(search) && !(s.name||'').toLowerCase().includes(search)) return false;
+    if(fStatus && s.status!==fStatus) return false;
+    const u = upside(s.price,s.target);
+    if(fUp==='pos' && (u==null||u<0)) return false;
+    if(fUp==='neg' && (u==null||u>=0)) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('stock-tbody');
+  if(!rows.length) {
+    tbody.innerHTML='<tr><td colspan="9" class="empty">No stocks yet — click "+ Add stock" to begin.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(s=>{
+    const u = upside(s.price,s.target);
+    const sLogs = weekLogs.filter(l=>l.ticker===s.ticker);
+    const chips = sLogs.map(l=>`<span class="chip chip-${l.activity_type}" title="${l.notes||l.activity_type}">${l.activity_type==='mentioned'?'M':l.activity_type==='bought'?'B':'S'}${l.notes?' · '+l.notes.slice(0,10):''}</span>`).join('');
+    const streak = getStreak(s.ticker);
+    const streakHtml = streak>1 ? `<span class="streak-badge">${streak}w</span>` : `<span style="color:#ccc">—</span>`;
+    return `<tr>
+      <td style="font-weight:600;font-size:14px">${s.ticker}</td>
+      <td style="color:var(--muted);font-size:12px" title="${s.name||''}">${s.name||''}</td>
+      <td><span class="badge badge-${s.status}">${s.status==='own'?'Own':'Watch'}</span></td>
+      <td style="font-variant-numeric:tabular-nums">$${fmt(s.price)} <button class="sm" onclick="openPrice('${s.id}')" style="opacity:.5">✎</button></td>
+      <td style="font-variant-numeric:tabular-nums">$${fmt(s.target)}</td>
+      <td class="${u==null?'na':u>=0?'up':'dn'}">${fmtPct(u)}</td>
+      <td>${chips||'<span style="color:#ccc;font-size:11px">—</span>'}</td>
+      <td>${streakHtml}</td>
+      <td><div class="actions">
+        <button class="sm" onclick="openLog('${s.id}')">+ Log</button>
+        <button class="sm" onclick="openEdit('${s.id}')">Edit</button>
+        <button class="sm danger" onclick="del('${s.id}')">✕</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSummary() {
+  const owned = stocks.filter(s=>s.status==='own').length;
+  const watch = stocks.filter(s=>s.status==='watch').length;
+  const ups = stocks.filter(s=>s.price&&s.target).map(s=>upside(s.price,s.target));
+  const avg = ups.length ? ups.reduce((a,b)=>a+b,0)/ups.length : null;
+  document.getElementById('summary-bar').innerHTML = `
+    <div class="metric"><div class="metric-label">Total stocks</div><div class="metric-val">${stocks.length}</div></div>
+    <div class="metric"><div class="metric-label">Owned</div><div class="metric-val" style="color:var(--green)">${owned}</div></div>
+    <div class="metric"><div class="metric-label">Watchlist</div><div class="metric-val" style="color:var(--blue)">${watch}</div></div>
+    <div class="metric"><div class="metric-label">Avg upside</div><div class="metric-val" style="color:${avg!=null&&avg>=0?'var(--green)':'var(--red)'}">${avg!=null?fmtPct(avg):'—'}</div></div>
+  `;
+}
+
+/* ─── MATRIX ─── */
+function renderMatrix() {
+  const nWeeks = parseInt(document.getElementById('matrix-weeks').value)||12;
+  const mFilter = document.getElementById('matrix-filter').value;
+  const allWeeks = [...new Set(logs.map(l=>l.week_of))].sort().reverse().slice(0,nWeeks).reverse();
+  let ms = [...stocks];
+  if(mFilter==='own') ms=ms.filter(s=>s.status==='own');
+  if(mFilter==='active') {
+    const recent = allWeeks.slice(-4);
+    ms=ms.filter(s=>logs.some(l=>l.ticker===s.ticker&&recent.includes(l.week_of)));
+  }
+  const el = document.getElementById('matrix-content');
+  if(!allWeeks.length||!ms.length) {
+    el.innerHTML='<div class="empty">No activity logged yet. Log weekly mentions and this view will populate.</div>';
+    return;
+  }
+  const cw = 58;
+  let html = `<table class="matrix-table" style="min-width:${110+allWeeks.length*cw+60}px">
+    <thead><tr>
+      <th class="ticker-col" style="min-width:110px">Ticker</th>
+      ${allWeeks.map(w=>`<th style="width:${cw}px">${w.slice(5)}</th>`).join('')}
+      <th class="total-col" style="width:60px">Total</th>
+    </tr></thead><tbody>`;
+
+  ms.forEach(s=>{
+    const total = logs.filter(l=>l.ticker===s.ticker).length;
+    const intensity = total>=15?'var(--text)':total>=8?'var(--amber)':total>=3?'var(--muted)':'var(--faint)';
+    html+=`<tr><td class="ticker-col" title="${s.name||s.ticker}">
+      ${s.ticker}
+      <div style="font-size:10px;font-weight:400;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${s.name?s.name.slice(0,14):''}</div>
+    </td>`;
+    allWeeks.forEach(w=>{
+      const entries = logs.filter(l=>l.ticker===s.ticker&&l.week_of===w);
+      if(entries.length) {
+        const p = entries[0];
+        const lbl = p.activity_type==='mentioned'?'M':p.activity_type==='bought'?'B':'S';
+        const tip = entries.map(e=>e.activity_type+(e.notes?' – '+e.notes:'')).join(', ');
+        html+=`<td class="mcell-${p.activity_type}" title="${tip}">${lbl}${entries.length>1?`<sup style="font-size:8px">${entries.length}</sup>`:''}</td>`;
+      } else {
+        html+=`<td class="mcell-empty">·</td>`;
+      }
+    });
+    html+=`<td class="total-col" style="color:${intensity};font-weight:700">${total}</td></tr>`;
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+/* ─── STOCK CRUD ─── */
+function openAddStock() {
+  if(!accessToken) { toast('Sign in with Google first'); return; }
+  editingId=null;
+  document.getElementById('stock-modal-title').textContent='Add stock';
+  document.getElementById('stock-modal-sub').textContent='Name and price auto-fill from FMP when you save.';
+  ['f-ticker','f-name','f-price','f-target','f-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-status').value='watch';
+  document.getElementById('stock-overlay').style.display='flex';
+  setTimeout(()=>document.getElementById('f-ticker').focus(),100);
+}
+
+function openEdit(id) {
+  editingId=id;
+  const s=stocks.find(x=>x.id===id); if(!s) return;
+  document.getElementById('stock-modal-title').textContent='Edit '+s.ticker;
+  document.getElementById('stock-modal-sub').textContent=s.name||'';
+  document.getElementById('f-ticker').value=s.ticker;
+  document.getElementById('f-name').value=s.name||'';
+  document.getElementById('f-price').value=s.price||'';
+  document.getElementById('f-target').value=s.target||'';
+  document.getElementById('f-status').value=s.status||'watch';
+  document.getElementById('f-notes').value=s.notes||'';
+  document.getElementById('stock-overlay').style.display='flex';
+}
+
+async function saveStock() {
+  const ticker = document.getElementById('f-ticker').value.trim().toUpperCase();
+  if(!ticker) { alert('Ticker is required.'); return; }
+  const btn = document.getElementById('btn-save-stock');
+  btn.disabled=true; btn.textContent='Saving…';
+
+  let name = document.getElementById('f-name').value.trim();
+  let price = parseFloat(document.getElementById('f-price').value)||null;
+
+  // Auto-fill from FMP if fields are empty
+  if(cfg.fmpKey && (!name || !price)) {
+    btn.textContent='Looking up '+ticker+'…';
+    const q = await fmpQuote(ticker);
+    if(q) { if(!name&&q.name) name=q.name; if(!price&&q.price) price=q.price; }
+  }
+
+  const body = {
+    id: editingId||uid(), ticker,
+    name: name||null, price: price||null,
+    target: parseFloat(document.getElementById('f-target').value)||null,
+    status: document.getElementById('f-status').value,
+    notes: document.getElementById('f-notes').value.trim()||null
+  };
+
+  if(editingId) {
+    const idx = stocks.findIndex(x=>x.id===editingId);
+    if(idx>=0) stocks[idx]={...stocks[idx],...body};
+  } else {
+    stocks.push(body);
+  }
+
+  await saveToDrive();
+  closeOverlay('stock-overlay');
+  renderStocks();
+  toast(editingId ? 'Stock updated' : `${ticker} added${name?' — '+name:''}`);
+  btn.disabled=false; btn.textContent='Save stock';
+}
+
+async function del(id) {
+  const s = stocks.find(x=>x.id===id);
+  if(!confirm(`Remove ${s?.ticker||'this stock'} and all its log entries?`)) return;
+  stocks = stocks.filter(x=>x.id!==id);
+  logs = logs.filter(l=>l.stock_id!==id);
+  await saveToDrive();
+  renderStocks(); renderMatrix();
+  toast('Removed');
+}
+
+/* ─── LOG CRUD ─── */
+function openLog(id) {
+  if(!accessToken) { toast('Sign in with Google first'); return; }
+  loggingId=id;
+  const s=stocks.find(x=>x.id===id); if(!s) return;
+  document.getElementById('log-modal-title').textContent='Log — '+s.ticker;
+  document.getElementById('log-modal-sub').textContent=(s.name?s.name+' · ':'')+'default week: '+cfg.currentWeek;
+  document.getElementById('l-type').value='mentioned';
+  document.getElementById('l-week').value=cfg.currentWeek;
+  document.getElementById('l-target').value='';
+  document.getElementById('l-notes').value='';
+  document.getElementById('log-overlay').style.display='flex';
+  setTimeout(()=>document.getElementById('l-notes').focus(),100);
+}
+
+async function saveLog() {
+  const s=stocks.find(x=>x.id===loggingId); if(!s) return;
+  const newTarget = parseFloat(document.getElementById('l-target').value)||null;
+  const weekOf = document.getElementById('l-week').value||cfg.currentWeek;
+  const entry = {
+    id: uid(), stock_id: loggingId, ticker: s.ticker,
+    week_of: weekOf,
+    activity_type: document.getElementById('l-type').value,
+    new_target: newTarget,
+    notes: document.getElementById('l-notes').value.trim()||null
+  };
+  logs.unshift(entry);
+  if(newTarget) {
+    const idx=stocks.findIndex(x=>x.id===loggingId);
+    if(idx>=0) stocks[idx].target=newTarget;
+  }
+  await saveToDrive();
+  closeOverlay('log-overlay');
+  renderStocks(); renderMatrix();
+  toast(`Logged ${entry.activity_type} for ${s.ticker} · week of ${weekOf}`);
+}
+
+/* ─── PRICE ─── */
+function openPrice(id) {
+  pricingId=id;
+  const s=stocks.find(x=>x.id===id); if(!s) return;
+  document.getElementById('price-modal-title').textContent='Update price — '+s.ticker;
+  document.getElementById('p-price').value=s.price||'';
+  document.getElementById('price-overlay').style.display='flex';
+  setTimeout(()=>document.getElementById('p-price').focus(),100);
+}
+
+async function savePrice() {
+  const s=stocks.find(x=>x.id===pricingId); if(!s) return;
+  const v=parseFloat(document.getElementById('p-price').value);
+  if(!isNaN(v)) {
+    const idx=stocks.findIndex(x=>x.id===pricingId);
+    if(idx>=0) stocks[idx].price=v;
+    await saveToDrive();
+  }
+  closeOverlay('price-overlay');
+  renderStocks();
+  toast('Price updated');
+}
+
+/* ─── EXPORT ─── */
+function exportCSV() {
+  const rows=[['Ticker','Name','Status','Price','Target','Upside %','Notes']];
+  stocks.forEach(s=>{
+    const u=upside(s.price,s.target);
+    rows.push([s.ticker,s.name||'',s.status,s.price||'',s.target||'',u!=null?u.toFixed(1):'',s.notes||'']);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='hayes_stocks.csv'; a.click();
+}
+</script>
+</body>
+</html>
