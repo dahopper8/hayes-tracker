@@ -309,17 +309,17 @@
       </div>
     </div>
     <div class="settings-section">
-      <h3>FMP pricing</h3>
+      <h3>Alpha Vantage pricing</h3>
       <div class="form-row" style="max-width:360px">
         <label>Financial Modeling Prep API key</label>
-        <input type="text" id="cfg-fmp-key" placeholder="Your FMP key">
-        <div class="form-hint">Free tier at financialmodelingprep.com — 250 calls/day. Used for auto price + name lookup.</div>
+        <input type="text" id="cfg-fmp-key" placeholder="Your Alpha Vantage key">
+        <div class="form-hint">Free at alphavantage.co — 25 calls/day, enough for daily watchlist refresh.</div>
       </div>
       <div class="conn-status" style="margin-bottom:14px">
         <span class="dot" id="dot-fmp"></span>
         <span id="status-fmp">Not configured</span>
       </div>
-      <button class="primary" onclick="saveFmpKey()">Save FMP key</button>
+      <button class="primary" onclick="saveFmpKey()">Save key</button>
     </div>
     <div class="settings-section">
       <h3>Current week</h3>
@@ -338,18 +338,18 @@
 <div id="stock-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeOverlay('stock-overlay')">
   <div class="modal">
     <div class="modal-title" id="stock-modal-title">Add stock</div>
-    <div class="modal-sub" id="stock-modal-sub">Name and price auto-fill from FMP when you save.</div>
+    <div class="modal-sub" id="stock-modal-sub">Name and price auto-fill from Alpha Vantage when you save.</div>
     <div class="form-row">
       <label>Ticker</label>
       <input type="text" id="f-ticker" placeholder="e.g. AAPL" oninput="this.value=this.value.toUpperCase()">
     </div>
     <div class="form-row">
       <label>Company name <span style="font-weight:400;text-transform:none;font-size:10px">(auto-filled)</span></label>
-      <input type="text" id="f-name" placeholder="Loads from FMP on save">
+      <input type="text" id="f-name" placeholder="Auto-fills on save">
     </div>
     <div class="form-row">
       <label>Current price ($) <span style="font-weight:400;text-transform:none;font-size:10px">(auto-filled)</span></label>
-      <input type="number" id="f-price" placeholder="Loads from FMP on save" step="0.01">
+      <input type="number" id="f-price" placeholder="Auto-fills on save" step="0.01">
     </div>
     <div class="form-row">
       <label>Tom Hayes price target ($)</label>
@@ -431,7 +431,7 @@ let stocks = [], logs = [];
 let driveFileId = null;
 let accessToken = null;
 let tokenClient = null;
-let cfg = { fmpKey: '', currentWeek: todayISO() };
+let cfg = { fmpKey: 'TCX36P9Q3RS9ZN8N', currentWeek: todayISO() };
 let editingId = null, loggingId = null, pricingId = null;
 let saveTimeout = null;
 
@@ -461,7 +461,7 @@ function saveLocalCfg() {
 }
 function saveFmpKey() {
   cfg.fmpKey = document.getElementById('cfg-fmp-key').value.trim();
-  saveLocalCfg(); updateFmpDot(); toast('FMP key saved');
+  saveLocalCfg(); updateFmpDot(); toast('Alpha Vantage key saved');
 }
 function saveCurrentWeek() {
   const v = document.getElementById('cfg-current-week').value;
@@ -476,7 +476,7 @@ function setWeekToday() {
 function updateFmpDot() {
   const ok = !!cfg.fmpKey;
   document.getElementById('dot-fmp').className = 'dot'+(ok?' dot-ok':'');
-  document.getElementById('status-fmp').textContent = ok ? 'FMP: configured' : 'Not configured — enter key above';
+  document.getElementById('status-fmp').textContent = ok ? 'Alpha Vantage: configured' : 'Not configured — enter key above';
 }
 
 /* ─── GOOGLE AUTH ─── */
@@ -582,26 +582,31 @@ function scheduleSave() {
   saveTimeout = setTimeout(saveToDrive, 800);
 }
 
-/* ─── FMP ─── */
+/* ─── ALPHA VANTAGE ─── */
 async function fmpQuote(ticker) {
   if(!cfg.fmpKey) return null;
-  // Profile endpoint — free tier, includes price + company name
   try {
-    const r = await fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${cfg.fmpKey}`);
+    // Global Quote — works on free tier
+    const r = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${cfg.fmpKey}`);
     const d = await r.json();
-    if(d && d[0] && d[0].price) return { name: d[0].companyName, price: d[0].price };
-  } catch(e) {}
-  // Fallback: historical EOD — free tier, grab most recent close
-  try {
-    const r = await fetch(`https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?limit=1&apikey=${cfg.fmpKey}`);
-    const d = await r.json();
-    if(d && d.historical && d.historical[0]) return { name: ticker, price: d.historical[0].close };
+    const q = d['Global Quote'];
+    if(q && q['05. price']) {
+      const price = parseFloat(q['05. price']);
+      // Get company name from overview endpoint
+      let name = ticker;
+      try {
+        const r2 = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${ticker}&apikey=${cfg.fmpKey}`);
+        const d2 = await r2.json();
+        if(d2 && d2.Name) name = d2.Name;
+      } catch(e) {}
+      return { name, price };
+    }
   } catch(e) {}
   return null;
 }
 
 async function refreshPrices() {
-  if(!cfg.fmpKey) { toast('Add your FMP key in Settings first'); return; }
+  if(!cfg.fmpKey) { toast('Add your Alpha Vantage key in Settings first'); return; }
   if(!accessToken) { toast('Sign in with Google first'); return; }
   const btn = document.getElementById('btn-refresh');
   btn.disabled=true; btn.textContent='Refreshing…';
@@ -755,7 +760,7 @@ function openAddStock() {
   if(!accessToken) { toast('Sign in with Google first'); return; }
   editingId=null;
   document.getElementById('stock-modal-title').textContent='Add stock';
-  document.getElementById('stock-modal-sub').textContent='Name and price auto-fill from FMP when you save.';
+  document.getElementById('stock-modal-sub').textContent='Name and price auto-fill from Alpha Vantage when you save.';
   ['f-ticker','f-name','f-price','f-target','f-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-status').value='watch';
   document.getElementById('stock-overlay').style.display='flex';
@@ -785,7 +790,7 @@ async function saveStock() {
   let name = document.getElementById('f-name').value.trim();
   let price = parseFloat(document.getElementById('f-price').value)||null;
 
-  // Auto-fill from FMP if fields are empty
+  // Auto-fill from Alpha Vantage if fields are empty
   if(cfg.fmpKey && (!name || !price)) {
     btn.textContent='Looking up '+ticker+'…';
     const q = await fmpQuote(ticker);
