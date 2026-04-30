@@ -585,10 +585,23 @@ function scheduleSave() {
 /* ─── FMP ─── */
 async function fmpQuote(ticker) {
   if(!cfg.fmpKey) return null;
+  // Try quote endpoint first
   try {
     const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${ticker}?apikey=${cfg.fmpKey}`);
     const d = await r.json();
-    if(d && d[0]) return { name: d[0].name, price: d[0].price };
+    if(d && d[0] && d[0].price) return { name: d[0].name, price: d[0].price };
+  } catch(e) {}
+  // Fallback: profile endpoint (available on free tier)
+  try {
+    const r = await fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${cfg.fmpKey}`);
+    const d = await r.json();
+    if(d && d[0] && d[0].price) return { name: d[0].companyName, price: d[0].price };
+  } catch(e) {}
+  // Fallback: real-time price endpoint
+  try {
+    const r = await fetch(`https://financialmodelingprep.com/api/v3/stock/real-time-price/${ticker}?apikey=${cfg.fmpKey}`);
+    const d = await r.json();
+    if(d && d.price) return { name: ticker, price: d.price };
   } catch(e) {}
   return null;
 }
